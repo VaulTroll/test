@@ -1,0 +1,588 @@
+#include <iostream>
+#include <array>
+#include <sstream>
+#include <algorithm>
+#include <string>
+#include <bitset>
+#include <cmath>
+#include <time.h>
+
+using namespace std;
+
+//const string cipher = "3d0546bc0871aafb5b2e4def8a3f73db";
+const string cipher = "b5219ee81aa7499d2196687e13973856";
+//string key = "2200180006000300";
+// const string cipher = "c0b7a8d05f3a829c";
+// const string key = "aabb09182736ccdd";
+// const string cipher = "da02ce3a89ecac3b";
+// const string key = "0f1571c947d9e859";
+string key56, key48;
+string binCipherText;
+string leftKey28, rightKey28;
+string leftBlk32, rightBlk32;
+string subKeyArr[16];
+string cipherText64;
+string plainText64;
+string expansOut48;
+string xorOut48;
+string xorOut32;
+string sBoxOut32;
+string funcOut32;
+string savePlain[1000];
+
+const array<int, 64> initPermut = { //초기순열 IP
+    58, 50, 42, 34, 26, 18, 10, 2,
+    60, 52, 44, 36, 28, 20, 12, 4,
+    62, 54, 46, 38, 30, 22, 14, 6,
+    64, 56, 48, 40, 32, 24, 16, 8,
+    57, 49, 41, 33, 25, 17, 9, 1,
+    59, 51, 43, 35, 27, 19, 11, 3,
+    61, 53, 45, 37, 29, 21, 13, 5,
+    63, 55, 47, 39, 31, 23, 15, 7};
+
+const array<int, 64> finalPermut = { //역초기순열 IP-1
+    40, 8, 48, 16, 56, 24, 64, 32,
+    39, 7, 47, 15, 55, 23, 63, 31,
+    38, 6, 46, 14, 54, 22, 62, 30,
+    37, 5, 45, 13, 53, 21, 61, 29,
+    36, 4, 44, 12, 52, 20, 60, 28,
+    35, 3, 43, 11, 51, 19, 59, 27,
+    34, 2, 42, 10, 50, 18, 58, 26,
+    33, 1, 41, 9, 49, 17, 57, 25};
+
+const array<int, 48> expansPermut = { //확장순열 E
+    32, 1, 2, 3, 4, 5,
+    4, 5, 6, 7, 8, 9,
+    8, 9, 10, 11, 12, 13,
+    12, 13, 14, 15, 16, 17,
+    16, 17, 18, 19, 20, 21,
+    20, 21, 22, 23, 24, 25,
+    24, 25, 26, 27, 28, 29,
+    28, 29, 30, 31, 32, 1};
+
+const array<int, 56> parityChoice1 = { //순열선택 PC_1
+    57, 49, 41, 33, 25, 17, 9, 1,
+    58, 50, 42, 34, 26, 18, 10, 2,
+    59, 51, 43, 35, 27, 19, 11, 3,
+    60, 52, 44, 36, 63, 55, 47, 39,
+    31, 23, 15, 7, 62, 54, 46, 38,
+    30, 22, 14, 6, 61, 53, 45, 37,
+    29, 21, 13, 5, 28, 20, 12, 4};
+
+const array<int, 48> parityChoice2 = { //순열선택 PC_2
+    14, 17, 11, 24, 1, 5, 3, 28,
+    15, 6, 21, 10, 23, 19, 12, 4,
+    26, 8, 16, 7, 27, 20, 13, 2,
+    41, 52, 31, 37, 47, 55, 30, 40,
+    51, 45, 33, 48, 44, 49, 39, 56,
+    34, 53, 46, 42, 50, 36, 29, 32};
+
+const array<int, 32> strPermutation = { //순열함수 P
+    16, 7, 20, 21, 29, 12, 28, 17,
+    1, 15, 23, 26, 5, 18, 31, 10,
+    2, 8, 24, 14, 32, 27, 3, 9,
+    19, 13, 30, 6, 22, 11, 4, 25};
+
+// S-BOX 8
+const int sb_1[4][16] = {
+    14, 4, 13, 1, 2, 15, 11, 8, 3, 10, 6, 12, 5, 9, 0, 7,
+    0, 15, 7, 4, 14, 2, 13, 1, 10, 6, 12, 11, 9, 5, 3, 8,
+    4, 1, 14, 8, 13, 6, 2, 11, 15, 12, 9, 7, 3, 10, 5, 0,
+    15, 12, 8, 2, 4, 9, 1, 7, 5, 11, 3, 14, 10, 0, 6, 13};
+
+const int sb_2[4][16] = {
+    15, 1, 8, 14, 6, 11, 3, 4, 9, 7, 2, 13, 12, 0, 5, 10,
+    3, 13, 4, 7, 15, 2, 8, 14, 12, 0, 1, 10, 6, 9, 11, 5,
+    0, 14, 7, 11, 10, 4, 13, 1, 5, 8, 12, 6, 9, 3, 2, 15,
+    13, 8, 10, 1, 3, 15, 4, 2, 11, 6, 7, 12, 0, 5, 14, 9};
+
+const int sb_3[4][16] = {
+    10, 0, 9, 14, 6, 3, 15, 5, 1, 13, 12, 7, 11, 4, 2, 8,
+    13, 7, 0, 9, 3, 4, 6, 10, 2, 8, 5, 14, 12, 11, 15, 1,
+    13, 6, 4, 9, 8, 15, 3, 0, 11, 1, 2, 12, 5, 10, 14, 7,
+    1, 10, 13, 0, 6, 9, 8, 7, 4, 15, 14, 3, 11, 5, 2, 12};
+
+const int sb_4[4][16] = {
+    7, 13, 14, 3, 0, 6, 9, 10, 1, 2, 8, 5, 11, 12, 4, 15,
+    13, 8, 11, 5, 6, 15, 0, 3, 4, 7, 2, 12, 1, 10, 14, 9,
+    10, 6, 9, 0, 12, 11, 7, 13, 15, 1, 3, 14, 5, 2, 8, 4,
+    3, 15, 0, 6, 10, 1, 13, 8, 9, 4, 5, 11, 12, 7, 2, 14};
+
+const int sb_5[4][16] = {
+    2, 12, 4, 1, 7, 10, 11, 6, 8, 5, 3, 15, 13, 0, 14, 9,
+    14, 11, 2, 12, 4, 7, 13, 1, 5, 0, 15, 10, 3, 9, 8, 6,
+    4, 2, 1, 11, 10, 13, 7, 8, 15, 9, 12, 5, 6, 3, 0, 14,
+    11, 8, 12, 7, 1, 14, 2, 13, 6, 15, 0, 9, 10, 4, 5, 3};
+
+const int sb_6[4][16] = {
+    12, 1, 10, 15, 9, 2, 6, 8, 0, 13, 3, 4, 14, 7, 5, 11,
+    10, 15, 4, 2, 7, 12, 9, 5, 6, 1, 13, 14, 0, 11, 3, 8,
+    9, 14, 15, 5, 2, 8, 12, 3, 7, 0, 4, 10, 1, 13, 11, 6,
+    4, 3, 2, 12, 9, 5, 15, 10, 11, 14, 1, 7, 6, 0, 8, 13};
+
+const int sb_7[4][16] = {
+    4, 11, 2, 14, 15, 0, 8, 13, 3, 12, 9, 7, 5, 10, 6, 1,
+    13, 0, 11, 7, 4, 9, 1, 10, 14, 3, 5, 12, 2, 15, 8, 6,
+    1, 4, 11, 13, 12, 3, 7, 14, 10, 15, 6, 8, 0, 5, 9, 2,
+    6, 11, 13, 8, 1, 4, 10, 7, 9, 5, 0, 15, 14, 2, 3, 12};
+
+const int sb_8[4][16] = {
+    13, 2, 8, 4, 6, 15, 11, 1, 10, 9, 3, 14, 5, 0, 12, 7,
+    1, 15, 13, 8, 10, 3, 7, 4, 12, 5, 6, 11, 0, 14, 9, 2,
+    7, 11, 4, 1, 9, 12, 14, 2, 0, 6, 10, 13, 15, 3, 5, 8,
+    2, 1, 14, 7, 4, 10, 8, 13, 15, 12, 9, 0, 3, 5, 6, 11};
+
+const string hex_bin(const string &hexStr) //hex를 바이너리로 바꾸는 함수
+{
+    string binStr{};
+    for (auto h = hexStr.begin(); h < hexStr.end(); ++h)
+    {
+        switch (*h)
+        {
+        case '0':
+            binStr.append("0000");
+            break;
+        case '1':
+            binStr.append("0001");
+            break;
+        case '2':
+            binStr.append("0010");
+            break;
+        case '3':
+            binStr.append("0011");
+            break;
+        case '4':
+            binStr.append("0100");
+            break;
+        case '5':
+            binStr.append("0101");
+            break;
+        case '6':
+            binStr.append("0110");
+            break;
+        case '7':
+            binStr.append("0111");
+            break;
+        case '8':
+            binStr.append("1000");
+            break;
+        case '9':
+            binStr.append("1001");
+            break;
+        case 'a':
+            binStr.append("1010");
+            break;
+        case 'b':
+            binStr.append("1011");
+            break;
+        case 'c':
+            binStr.append("1100");
+            break;
+        case 'd':
+            binStr.append("1101");
+            break;
+        case 'e':
+            binStr.append("1110");
+            break;
+        case 'f':
+            binStr.append("1111");
+            break;
+        default:
+            cout << "wrong hex str" << endl;
+        }
+    }
+    return binStr;
+}
+/////////////////////////////////////////////////
+const int bin2dec(const string &binStr)
+{
+    int decNum{};
+    for (auto it = binStr.rbegin(); it < binStr.rend(); it++)
+        if (*it == '1')
+            decNum += pow(2, distance(binStr.rbegin(), it));
+    return decNum;
+}
+const string bin2hex(const string &binStr)
+{
+    string hexStr{};
+    string b4; // to hold 4-bit binary number
+    for (int i = 0; i < (int)binStr.length(); i += 4)
+    {
+        b4 = binStr.substr(i, 4);
+        switch (bin2dec(b4))
+        {
+        case 0:
+            hexStr.append("0");
+            break;
+        case 1:
+            hexStr.append("1");
+            break;
+        case 2:
+            hexStr.append("2");
+            break;
+        case 3:
+            hexStr.append("3");
+            break;
+        case 4:
+            hexStr.append("4");
+            break;
+        case 5:
+            hexStr.append("5");
+            break;
+        case 6:
+            hexStr.append("6");
+            break;
+        case 7:
+            hexStr.append("7");
+            break;
+        case 8:
+            hexStr.append("8");
+            break;
+        case 9:
+            hexStr.append("9");
+            break;
+        case 10:
+            hexStr.append("A");
+            break;
+        case 11:
+            hexStr.append("B");
+            break;
+        case 12:
+            hexStr.append("C");
+            break;
+        case 13:
+            hexStr.append("D");
+            break;
+        case 14:
+            hexStr.append("E");
+            break;
+        case 15:
+            hexStr.append("F");
+            break;
+        default:
+        {
+            std::cout << "ERROR!, bin2hex binary string must be multiple of 4";
+            exit(0);
+        }
+        }
+    }
+    return hexStr;
+}
+/////////////////////////////////////////
+void xor48(const string &inBlk48, const string &inKey48) //XOR함수
+{
+    bitset<48> out48, xor1(inBlk48), xor2(inKey48); //bitset형으로 선언, 들어온 두 문자열을 bitset형 변수에 저장
+    out48 = xor1 ^ xor2;
+    xorOut48 = out48.to_string();
+}
+void xor32(const string &lBlk32, const string &rBlk32)
+{
+    bitset<32> out32, xor1(lBlk32), xor2(rBlk32);
+    out32 = xor1 ^ xor2;
+    xorOut32 = out32.to_string();
+}
+
+//////////------------------------------------------------------------------------------------------ Make KEY
+void leftShift(string &subKey28, int n)
+{                                                                   // <<연산자를 사용할 경우 범위를 넘어가면 비트가 손실된다 그래서 rotate를 이용
+    rotate(subKey28.begin(), subKey28.begin() + n, subKey28.end()); //시작, 끝, 옮겨질 위치
+}
+
+void firstKeyPermut(const string &binKey64)
+{ //서브키를 위한 첫 PC_1과의 순열
+    bitset<56> outKey56;
+    int index, pos;
+    for (auto it = binKey64.begin(); it < binKey64.end(); it++)
+    {
+        pos = distance(binKey64.begin(), it) + 1; //1을 더해주는 이유는 우리가 가진 순열은 1부터 시작해 64까지 존재하기 때문
+        if (*it == '1' && pos != 8 && pos != 16 && pos != 24 && pos != 32 && pos != 40 && pos != 48 && pos != 56 && pos != 64)
+        {                                                                                                   //여기서 1만을 찾아 처리하는 이유는 우리의 관심사는 해당 1이 어느 위치로 치환되는지를 관심갖기 때문, 0까지 전부 할 필요 없다
+            index = distance(parityChoice1.begin(), find(parityChoice1.begin(), parityChoice1.end(), pos)); //원래 1이 위치한 [인덱스의] 값을 PC_1에서 찾아 그 (*)값에 set
+            outKey56.set(55 - index, 1);                                                                    //bitset의 set함수는 오른쪽 비트부터 계산하기에 전체 크기 56-1 에서 인덱스를 뺀 값이 우리가 보는 실제 비트 위치이다
+        }
+    }
+    key56 = outKey56.to_string();
+}
+
+void lastKeyPermut(const string &inKey56, const int round) //서브키 생성을 위한 PC_2단계
+{
+    bitset<48> outKey48;
+    int index, pos;
+    for (auto it = inKey56.begin(); it < inKey56.end(); it++)
+    {
+        pos = distance(inKey56.begin(), it) + 1; //순열은 1부터 시작해 56까지 존재하기 때문에
+        if (*it == '1' && pos != 9 && pos != 18 && pos != 22 && pos != 25 && pos != 35 && pos != 38 && pos != 43 && pos != 54)
+        {                                                                                                   //9, 18, 22, 25, 35, 38, 43, 54의 8비트는 사라져 총 48비트로 축소된다
+            index = distance(parityChoice2.begin(), find(parityChoice2.begin(), parityChoice2.end(), pos)); //1의 인덱스 값을 순열에서 찾아 어느 위치로 치환되는지 찾기
+            outKey48.set(47 - index, 1);
+        }
+    }
+    subKeyArr[round - 1] = outKey48.to_string();
+}
+
+void subKeyCreate(const string &key64)
+{                          // 서브키생성
+    firstKeyPermut(key64); //첫 순열 PC_1를 위한 함수
+
+    leftKey28 = key56.substr(0, 28);
+    rightKey28 = key56.substr(28, 28); //이후 28비트 2개의 부분으로 나눔
+
+    for (int r = 1; r <= 16; r++) //16라운드 서브키 생성을 위한 반복
+    {
+        if (r == 1 || r == 2 || r == 9 || r == 16) //1, 2, 9, 16라운드 서브키 생성 때는 1bit만큼 shift하고 나머지는 2bit shift
+        {
+            leftShift(leftKey28, 1);
+            leftShift(rightKey28, 1);
+        }
+        else
+        {
+            leftShift(leftKey28, 2);
+            leftShift(rightKey28, 2);
+        }
+        key56 = leftKey28 + rightKey28;
+
+        lastKeyPermut(key56, r); //여기서 서브키 생성해서 배열에 저장하자
+    }
+}
+//---------------------------------------------------------------------- subKEY END
+
+//-----------------------------
+void initDESPermu(const string &cipher64)
+{ //초기순열 IP을 통과 이전의 순열함수와 동일
+    bitset<64> outCipher64;
+    int index, pos;
+    for (auto it = cipher64.begin(); it < cipher64.end(); it++)
+    {
+        if (*it == '1')
+        {
+            pos = distance(cipher64.begin(), it);
+            index = initPermut.at(pos);
+            outCipher64.set(64 - index, 1);
+        }
+    }
+    plainText64 = outCipher64.to_string();
+}
+
+void finalDESPermu(const string &cipher64)
+{ //역초기순열 IP-1을 통과 이전의 순열함수와 동일
+    bitset<64> outCipher64;
+    int index, pos;
+    for (auto it = cipher64.begin(); it < cipher64.end(); it++)
+    {
+        if (*it == '1')
+        {
+            pos = distance(cipher64.begin(), it); //1
+            index = finalPermut.at(pos);
+            outCipher64.set(64 - index, 1);
+        }
+    }
+    cipherText64 = outCipher64.to_string();
+}
+
+void expansionPermu(const string &inBlk32)
+{ //F함수에서 사용되는 확장순열 E
+    string outBlk48;
+    for (int i = 0; i < 48; i++)                     //확장순열 테이블 인자값 접근을 통한 확장
+        outBlk48 += inBlk32[expansPermut.at(i) - 1]; //at(n)는 [n]의 인덱스 접근과 같으나 안전하다는 장점이 있다
+    expansOut48 = outBlk48;
+}
+
+///////////////////////////////////
+void sBox(const string &inBlk48)
+{
+    sBoxOut32 = "";  // 초기화
+    bitset<4> sbox4; // sbox4비트 출력값 저장할 변수 {}
+    int row, col;    //sbox에서 행과 열을 저장할 변수 {}{}
+    for (int i = 0; i < 48; i += 6)
+    {
+        row = bin2dec(inBlk48.substr(i, 1) + inBlk48.substr(i + 5, 1)); // s-box 행
+        col = bin2dec(inBlk48.substr(i + 1, 4));                        //s-box 열
+        // selection of s-box
+        switch (i)
+        {
+        case 0:
+            sbox4 = sb_1[row][col]; //bitset형에 저장되므로 10진수는 자동으로 2진수로 변환된다
+            break;
+        case 6:
+            sbox4 = sb_2[row][col];
+            break;
+        case 12:
+            sbox4 = sb_3[row][col];
+            break;
+        case 18:
+            sbox4 = sb_4[row][col];
+            break;
+        case 24:
+            sbox4 = sb_5[row][col];
+            break;
+        case 30:
+            sbox4 = sb_6[row][col];
+            break;
+        case 36:
+            sbox4 = sb_7[row][col];
+            break;
+        case 42:
+            sbox4 = sb_8[row][col];
+            break;
+        default:
+        {
+            cout << "S-BOX ERROR" << endl;
+            exit(0);
+        }
+        }
+        sBoxOut32 += sbox4.to_string(); //8번의 반복을 통해 32비트의 출력값 생성
+    }
+}
+void strPermu(const string &inBlk32)
+{ //F함수에서 마지막 순열함수 P
+    bitset<32> outBlk32;
+    int index, pos;
+    for (auto it = inBlk32.begin(); it < inBlk32.end(); it++)
+    {
+        if (*it == '1')
+        {
+            pos = distance(inBlk32.begin(), it) + 1;
+            index = distance(strPermutation.begin(), find(strPermutation.begin(), strPermutation.end(), pos));
+            outBlk32.set(31 - index, 1);
+        }
+    }
+    funcOut32 = outBlk32.to_string();
+}
+// void strPermu(const string &inBlk32)
+// { //F함수에서 마지막 순열함수 P
+//     bitset<32> outBlk32;
+//     int index, pos;
+//     cout << "in:  " << inBlk32 << endl;
+//     for (auto it = inBlk32.begin(); it < inBlk32.end(); it++)
+//     {
+//         if (*it == '1')
+//         {
+//             pos = distance(inBlk32.begin(), it);
+//             index = strPermutation.at(pos);
+//             cout << " inde: " << 32 - index << "// ";
+//             outBlk32.set(32 - index, 1);
+//         }
+//     }
+//     funcOut32 = outBlk32.to_string();
+//     cout << "  out: " << funcOut32 << endl;
+// }
+
+////////////////////////////////////////////
+
+void myF_func(const string &cipher32, const int round)
+{                                             //F함수, 필요한 인자는 Li 이다
+    expansionPermu(cipher32);                 //먼저 E확장 순열 통과
+    xor48(expansOut48, subKeyArr[round - 1]); //통과하여 확장된 값과 서브 키 값을 XOR
+    sBox(xorOut48);                           //해당 값을 sBox에 통과
+    strPermu(sBoxOut32);                      //통과되어 나온 32비트를 순열에 통과시킨다
+}
+
+string my_decryption(string &myCipherText, const string &key64)
+{ //복호화 함수
+    string plain;
+    subKeyCreate(key64); //서브키 생성
+
+    finalDESPermu(myCipherText); // 복호화는 반대 절차이므로 역초기화순열 IP-1부터 통과, myCipherText는 순열된 문자열
+    cout << cipherText64 << endl;
+    cout << " fin-1: " << bin2hex(cipherText64) << endl;
+
+    rightBlk32 = cipherText64.substr(0, 32); //순열함수 통과 후 32비트의 두 블록으로 나눔
+    leftBlk32 = cipherText64.substr(32, 32); //right이 0~32비트인 이유는 역초기화순열을 지나기 전에 swap되는 것을 반영한 것임
+
+    for (int i = 16; i > 0; i--)
+    {                           //16라운드 F함수 반복
+        myF_func(leftBlk32, i); //Li에 F함수 적용
+
+        xor32(funcOut32, rightBlk32); // Li에 F함수를 적용한 값과 Ri의 값을 XOR한 것이 Ri-1의 값이 된다
+
+        rightBlk32 = leftBlk32;
+        leftBlk32 = xorOut32; //현재 Ri에는 Li-1의 값이, Li에는 Ri-1값이 들어 있으므로 두 값을 스왑
+
+        cout << i << ": left: " << bin2hex(leftBlk32) << ": right: " << bin2hex(rightBlk32) << " key: " << bin2hex(subKeyArr[i - 1]) << endl;
+    }
+
+    initDESPermu(leftBlk32 + rightBlk32); // 마지막으로 초기화함수 IP통과
+
+    plain = plainText64; //복호화된 평문 블록을 리턴
+    return plain;
+}
+
+void bruteForce(string &keyForce)
+{
+    string binKey;
+    string firstCipBlk, lastCipBlk;
+    string myCipherTextme;
+    string firstPlaBlk, lastPlaBlk;
+    //string myPlainText;
+
+    binKey = hex_bin(keyForce); //키를 바이너리로
+    // myCipherTextme = my_decryption(binCipherText, binKey);
+
+    firstCipBlk = binCipherText.substr(0, 64); //암호문 블럭 나누기
+    lastCipBlk = binCipherText.substr(64, 64);
+
+    firstPlaBlk = my_decryption(firstCipBlk, binKey); //복호화
+    lastPlaBlk = my_decryption(lastCipBlk, binKey);
+
+    myCipherTextme = firstPlaBlk + lastPlaBlk; //복원된 평문을 합치기
+    savePlain[0] = bin2hex(myCipherTextme);    //평문을 hex로 바꿔 출력
+
+    //ascii_test(myPlainText);
+}
+
+int main()
+{
+    // clock_t start, end;
+    // double res;
+
+    // string binCipherText;
+    // string binKey;
+    // string firstCipBlk, lastCipBlk;
+    // string myCipherTextme;
+    // string firstPlaBlk, lastPlaBlk;
+    // string myPlainText;
+
+    binCipherText = hex_bin(cipher); //암호문을 바이너리로
+                                     // cout << binCipherText << endl;
+                                     // cout << bin2hex(binCipherText) << endl;
+
+    // binKey = hex_bin(key);           //키를 바이너리로 myCipherTextme = my_decryption(binCipherText, binKey);
+
+    // firstCipBlk = binCipherText.substr(0, 64); //암호문 블럭 나누기
+    // lastCipBlk = binCipherText.substr(64, 64);
+
+    // firstPlaBlk = my_decryption(firstCipBlk, binKey); //복호화
+    // lastPlaBlk = my_decryption(lastCipBlk, binKey);
+
+    // myCipherTextme = firstPlaBlk + lastPlaBlk; //복원된 평문을 합치기
+    // myPlainText = bin2hex(myCipherTextme);     //평문을 hex로 바꿔 출력
+    //string keyTest = "2200180006000300";
+    string keyTest = "752878397493cb70";
+    bruteForce(keyTest);
+
+    cout << "plain: " << savePlain[0] << endl;
+
+    return 0;
+}
+// int main()
+// {
+//     clock_t start, end;
+//     double res;
+//     string binkey = "0010001000000000000110000000000000000110000000000000001100000000";
+
+//     start = clock();
+//     firstKeyPermutX(binkey);
+//     end = clock();
+//     res = (double)(end - start);
+//     cout << "일반 배열 사용: " << res << endl;
+//     cout << key66 << endl;
+
+//     start = clock();
+//     firstKeyPermut(binkey);
+//     end = clock();
+//     res = (double)(end - start);
+//     cout << "std::array 사용 : " << res << endl;
+//     cout << key56 << endl;
+
+//     return 0;
+// }
